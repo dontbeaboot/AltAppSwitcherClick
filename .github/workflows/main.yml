@@ -32,21 +32,20 @@ jobs:
     - name: Add UCRT64 bin to PATH
       run: echo "C:\msys64\ucrt64\bin" >> $GITHUB_PATH
 
-    - name: Build with Makefile (force disable sanitizer everywhere)
+    - name: Build with Makefile (final linker fix)
       shell: msys2 {0}
       run: |
         make clean || true
-        # Force-disable sanitizer in both compile and link
         make \
           CC=clang \
           CXX=clang++ \
           LD=clang \
           CFLAGS="-O2 -g -Wall -Wextra -Wshadow -Werror -DARCH_x86_64=1 -DNTDDI_VERSION=NTDDI_WIN10 -std=c11 \
                   -I./SDK/Headers -I./Sources -I./SDK/Sources" \
-          LDFLAGS="-static -static-libgcc \
-                   -L./SDK/Libs/x86_64 -L./SDK/Libs/x86_64/curl \
-                   -ldwmapi -lUser32 -lGdi32 -lGdiplus -lshlwapi -lpthread -lOle32 -lComctl32 -luuid" \
-          SANITIZE=0   # If Makefile has a SANITIZE variable, set to 0
+          LDFLAGS="-L./SDK/Libs/x86_64 -L./SDK/Libs/x86_64/curl \
+                   -ldwmapi -luser32 -lgdi32 -lgdiplus -lshlwapi -lpthread -lole32 -lcomctl32 -luuid \
+                   -static-libgcc -Wl,--disable-sanitize-address-use-odr-indicator" \
+          NO_SANITIZE=1   # Custom override if Makefile has sanitizer toggle
 
     - name: Copy runtime DLLs for portable exe
       shell: msys2 {0}
