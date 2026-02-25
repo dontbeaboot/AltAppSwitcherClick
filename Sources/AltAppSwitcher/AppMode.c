@@ -32,7 +32,6 @@
 #include "Messages.h"
 #include "Common.h"
 #include <dwmapi.h>
-#pragma comment(lib, "dwmapi.lib")
 
 static LRESULT MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -1112,6 +1111,19 @@ static GpBitmap* CaptureStaticPreview(HWND hwnd) {
     return bmp;
 }
 
+static void RestoreWin(HWND win)
+{
+    if (!IsWindow(win))
+        return;
+    WINDOWPLACEMENT placement;
+    placement.length = sizeof(WINDOWPLACEMENT);
+    GetWindowPlacement(win, &placement);
+    if (placement.showCmd == SW_SHOWMINIMIZED) {
+        ShowWindowAsync(win, SW_RESTORE);
+        SetWindowPos(win, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_ASYNCWINDOWPOS); // Why this call?
+    }
+}
+
 static BOOL FillWinGroups(HWND hwnd, LPARAM lParam)
 {
     struct WindowData* windowData = (struct WindowData*)lParam;
@@ -1485,19 +1497,6 @@ static void ClearWinGroupArr(SWinGroupArr* winGroups)
     winGroups->Size = 0;
 }
 
-static void RestoreWin(HWND win)
-{
-    if (!IsWindow(win))
-        return;
-    WINDOWPLACEMENT placement;
-    placement.length = sizeof(WINDOWPLACEMENT);
-    GetWindowPlacement(win, &placement);
-    if (placement.showCmd == SW_SHOWMINIMIZED) {
-        ShowWindowAsync(win, SW_RESTORE);
-        SetWindowPos(win, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOOWNERZORDER | SWP_NOZORDER | SWP_ASYNCWINDOWPOS); // Why this call?
-    }
-}
-
 /*
 static void UIASetFocus(HWND win)
 {
@@ -1710,6 +1709,10 @@ static void Draw(struct WindowData* windowData, RECT clientRect)
 
         // NEW: Use preview if available, else fallback to icon
         GpBitmap* mainBmp = pWinGroup->PreviewBitmap ? pWinGroup->PreviewBitmap : pWinGroup->IconBitmap;
+        
+        int drawW = 0;
+        int drawH = 0;
+        
         if (mainBmp) {
             unsigned int bmpW, bmpH;
             GdipGetImageWidth(mainBmp, &bmpW);
@@ -1717,8 +1720,8 @@ static void Draw(struct WindowData* windowData, RECT clientRect)
         
             // Scale to fit (preserve aspect for previews)
             float scale = min(iconSize / (float)bmpW, iconSize / (float)bmpH);
-            int drawW = (int)(bmpW * scale);
-            int drawH = (int)(bmpH * scale);
+            drawW = (int)(bmpW * scale);
+            drawH = (int)(bmpH * scale);
             int offsetX = (int)(x + padIcon + (iconSize - drawW) / 2.0f);
             int offsetY = (int)(y + padIcon + (iconSize - drawH) / 2.0f);
         
