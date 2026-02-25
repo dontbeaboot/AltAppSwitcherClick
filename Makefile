@@ -33,8 +33,8 @@ LFLAGS = -static -static-libgcc -Werror
 CFLAGS += -Wall -Wextra -Wshadow -Werror -D ARCH_$(ARCH)=1 -D NTDDI_VERSION=NTDDI_WIN10 -target $(ARCH)-w64-mingw32 -std=c11
 
 ifeq ($(CONF), Debug)
-CFLAGS += -g3 -fsanitize=address,undefined
-LFLAGS += -fsanitize=address,undefined
+# CFLAGS += -g3 -fsanitize=address,undefined
+# LFLAGS += -fsanitize=address,undefined
 else
 CFLAGS += -O3
 LFLAGS += -mwindows
