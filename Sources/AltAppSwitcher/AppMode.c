@@ -31,6 +31,8 @@
 #include "Utils/File.h"
 #include "Messages.h"
 #include "Common.h"
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 
 static LRESULT MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -46,6 +48,7 @@ typedef struct SWinGroup {
     HWND Windows[MAX_WIN_GROUPS];
     uint32_t WindowCount;
     GpBitmap* IconBitmap;
+    GpBitmap* PreviewBitmap;
 } SWinGroup;
 
 typedef struct SWinArr {
@@ -1057,6 +1060,58 @@ static BOOL IsRunWindow(HWND hwnd)
     return true;
 }
 
+static GpBitmap* CaptureStaticPreview(HWND hwnd) {
+    if (!IsWindow(hwnd)) return NULL;
+
+    RECT r;
+    if (FAILED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) {
+        GetWindowRect(hwnd, &r);
+    }
+
+    int w = r.right - r.left;
+    int h = r.bottom - r.top;
+    if (w <= 0 || h <= 0) return NULL;
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hbm = CreateCompatibleBitmap(hdcScreen, w, h);
+    HBITMAP old = SelectObject(hdcMem, hbm);
+
+    // Capture full content (non-live snapshot)
+    BOOL ok = PrintWindow(hwnd, hdcMem, PW_RENDERFULLCONTENT);
+
+    if (!ok) {
+        // Fallback
+        HDC hdcWin = GetWindowDC(hwnd);
+        if (hdcWin) {
+            BitBlt(hdcMem, 0, 0, w, h, hdcWin, 0, 0, SRCCOPY);
+            ReleaseDC(hwnd, hdcWin);
+            ok = TRUE;
+        }
+    }
+
+    SelectObject(hdcMem, old);
+
+    GpBitmap* bmp = NULL;
+    if (ok) {
+        BITMAP bm;
+        GetObject(hbm, sizeof(bm), &bm);
+        GdipCreateBitmapFromScan0(bm.bmWidth, bm.bmHeight, bm.bmWidthBytes, PixelFormat32bppARGB, NULL, &bmp);
+        if (bmp) {
+            GpRect gr = {0, 0, bm.bmWidth, bm.bmHeight};
+            BitmapData bd;
+            GdipBitmapLockBits(bmp, &gr, ImageLockModeWrite, PixelFormat32bppARGB, &bd);
+            GetBitmapBits(hbm, bm.bmWidthBytes * bm.bmHeight, bd.Scan0);
+            GdipBitmapUnlockBits(bmp, &bd);
+        }
+    }
+
+    DeleteObject(hbm);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+    return bmp;
+}
+
 static BOOL FillWinGroups(HWND hwnd, LPARAM lParam)
 {
     struct WindowData* windowData = (struct WindowData*)lParam;
@@ -1101,6 +1156,14 @@ static BOOL FillWinGroups(HWND hwnd, LPARAM lParam)
                     group->Caption[0] = L'\0';
                 }
                 group->Windows[group->WindowCount++] = hwnd;
+
+                // NEW: Capture preview using the first window in the group (or add logic for best one, e.g. non-minimized)
+                if (group->WindowCount == 1 && !group->PreviewBitmap) {
+                    HWND srcWnd = hwnd;  // Use first window; you can loop to find a better one if needed
+                    if (windowData->StaticData->Config->RestoreMinimizedWindows) RestoreWin(srcWnd);  // Optional: restore if minimized for capture
+                    group->PreviewBitmap = CaptureStaticPreview(srcWnd);
+                }
+                
                 return true;
             }
         }
@@ -1412,6 +1475,12 @@ static void ClearWinGroupArr(SWinGroupArr* winGroups)
         winGroups->Data[i].WindowCount = 0;
         winGroups->Data[i].AppName[0] = L'\0';
         winGroups->Data[i].Caption[0] = L'\0';
+    
+        // NEW: Cleanup preview
+        if (winGroups->Data[i].PreviewBitmap) {
+            GdipDisposeImage(winGroups->Data[i].PreviewBitmap);
+            winGroups->Data[i].PreviewBitmap = NULL;
+        }
     }
     winGroups->Size = 0;
 }
@@ -1639,30 +1708,43 @@ static void Draw(struct WindowData* windowData, RECT clientRect)
     for (uint32_t i = 0; i < windowData->WinGroups.Size; i++) {
         const SWinGroup* pWinGroup = &windowData->WinGroups.Data[i];
 
-        // Icon
-        // TODO: Check histogram and invert (or another filter) if background is similar
-        // https://learn.microsoft.com/en-us/windows/win32/api/gdiplusheaders/nf-gdiplusheaders-bitmap-gethistogram
-        // https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-using-a-color-remap-table-use
-        // https://learn.microsoft.com/en-us/windows/win32/gdiplus/-gdiplus-using-a-color-matrix-to-transform-a-single-color-use
-        // Also check palette to see if monochrome
-        if (pWinGroup->IconBitmap) {
-            unsigned int bitmapWidth;
-            GdipGetImageWidth(pWinGroup->IconBitmap, &bitmapWidth);
-            // If very low res, use nearest neighbor upscale
-            if (bitmapWidth < 64) {
-                InterpolationMode backupInterpMode = InterpolationModeInvalid;
-                GdipGetInterpolationMode(pGraphics, &backupInterpMode);
-                GdipSetInterpolationMode(pGraphics, InterpolationModeNearestNeighbor); // InterpolationModeHighQualityBicubic
-                // Ensure draw size is a multiple of bitmap size so upscaled pixel size is constant.
-                unsigned int ratio = (unsigned int)(iconSize / (float)bitmapWidth);
-                unsigned int targetIconSize = ratio * bitmapWidth;
-                float extraPad = (iconSize - (float)targetIconSize) / 2.0f;
-                GdipDrawImageRectI(
-                    pGraphics, pWinGroup->IconBitmap, (INT)(x + padIcon + extraPad),
-                    (INT)(y + padIcon + extraPad), (INT)targetIconSize, (INT)targetIconSize);
-                GdipSetInterpolationMode(pGraphics, backupInterpMode);
-            } else
-                GdipDrawImageRectI(pGraphics, pWinGroup->IconBitmap, (INT)(x + padIcon), (INT)(y + padIcon), (INT)iconSize, (INT)iconSize);
+        // NEW: Use preview if available, else fallback to icon
+        GpBitmap* mainBmp = pWinGroup->PreviewBitmap ? pWinGroup->PreviewBitmap : pWinGroup->IconBitmap;
+        if (mainBmp) {
+            unsigned int bmpW, bmpH;
+            GdipGetImageWidth(mainBmp, &bmpW);
+            GdipGetImageHeight(mainBmp, &bmpH);
+        
+            // Scale to fit (preserve aspect for previews)
+            float scale = min(iconSize / (float)bmpW, iconSize / (float)bmpH);
+            int drawW = (int)(bmpW * scale);
+            int drawH = (int)(bmpH * scale);
+            int offsetX = (int)(x + padIcon + (iconSize - drawW) / 2.0f);
+            int offsetY = (int)(y + padIcon + (iconSize - drawH) / 2.0f);
+        
+            InterpolationMode oldMode;
+            GdipGetInterpolationMode(pGraphics, &oldMode);
+            if (bmpW < 64) GdipSetInterpolationMode(pGraphics, InterpolationModeNearestNeighbor);
+        
+            GdipDrawImageRectI(pGraphics, mainBmp, offsetX, offsetY, drawW, drawH);
+        
+            GdipSetInterpolationMode(pGraphics, oldMode);
+        }
+        
+        // NEW: Overlay small app icon bottom-left (only if preview is shown)
+        if (pWinGroup->PreviewBitmap && pWinGroup->IconBitmap) {
+            unsigned int iconW, iconH;
+            GdipGetImageWidth(pWinGroup->IconBitmap, &iconW);
+            GdipGetImageHeight(pWinGroup->IconBitmap, &iconH);
+        
+            float iconScale = iconSize * 0.4f / (float)max(iconW, iconH);  // ~40% of container
+            int iconDrawW = (int)(iconW * iconScale);
+            int iconDrawH = (int)(iconH * iconScale);
+        
+            int iconX = (int)(x + padIcon + 8);  // 8px padding from left/bottom
+            int iconY = (int)(y + padIcon + drawH - iconDrawH - 8);  // align to bottom of preview
+        
+            GdipDrawImageRectI(pGraphics, pWinGroup->IconBitmap, iconX, iconY, iconDrawW, iconDrawH);
         }
 
         // Digit
