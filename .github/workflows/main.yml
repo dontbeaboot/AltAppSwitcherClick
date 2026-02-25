@@ -1,0 +1,40 @@
+name: Build AltAppSwitcher on Windows
+
+on:
+  push:
+    branches: [ main ]          # or master, depending on your default branch
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:            # lets you trigger manually from Actions tab
+
+jobs:
+  build:
+    runs-on: windows-latest     # or windows-2019 if latest fails with DLL issues
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup MinGW
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: MINGW64
+        update: true
+        install: >-
+          mingw-w64-x86_64-gcc
+          mingw-w64-x86_64-g++
+          mingw-w64-x86_64-make
+          mingw-w64-x86_64-gdiplus-headers  # if GDI+ is used
+
+    - name: Add MinGW to PATH
+      run: echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
+
+    - name: Build with Makefile
+      shell: msys2 {0}
+      run: mingw32-make
+
+    - name: Upload executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: AltAppSwitcherClick-exe
+        path: AltAppSwitcherClick.exe          # adjust if your exe has different name/path
+        if-no-files-found: error
