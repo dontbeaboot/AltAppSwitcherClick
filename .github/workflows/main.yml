@@ -36,6 +36,7 @@ jobs:
       shell: msys2 {0}
       run: |
         make clean || true
+        make CC=gcc CXX=g++ LD=gcc
         make CC=clang CXX=clang++ LD=clang LDXX=clang++ AR=ar RANLIB=ranlib \
              CFLAGS="-O2 -g -Wall -Wextra -Wshadow -Werror -D ARCH_x86_64=1 -D NTDDI_VERSION=NTDDI_WIN10 -std=c11" \
              LDFLAGS="-static -static-libgcc -l dwmapi -l User32 -l Gdi32 -l Gdiplus -l shlwapi -l pthread -l Ole32 -l Comctl32 -l uuid"
