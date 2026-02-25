@@ -32,7 +32,7 @@ jobs:
     - name: Add UCRT64 bin to PATH
       run: echo "C:\msys64\ucrt64\bin" >> $GITHUB_PATH
 
-    - name: Build with Makefile (final linker fix)
+    - name: Build with Makefile (dynamic link GDI+ & system libs, correct order)
       shell: msys2 {0}
       run: |
         make clean || true
@@ -43,9 +43,8 @@ jobs:
           CFLAGS="-O2 -g -Wall -Wextra -Wshadow -Werror -DARCH_x86_64=1 -DNTDDI_VERSION=NTDDI_WIN10 -std=c11 \
                   -I./SDK/Headers -I./Sources -I./SDK/Sources" \
           LDFLAGS="-L./SDK/Libs/x86_64 -L./SDK/Libs/x86_64/curl \
-                   -ldwmapi -luser32 -lgdi32 -lgdiplus -lshlwapi -lpthread -lole32 -lcomctl32 -luuid \
-                   -static-libgcc -Wl,--disable-sanitize-address-use-odr-indicator" \
-          NO_SANITIZE=1   # Custom override if Makefile has sanitizer toggle
+                   -lgdiplus -lgdi32 -luser32 -ldwmapi -lole32 -lcomctl32 -luuid -lshlwapi -lpthread -loleaut32 \
+                   -static-libgcc"
 
     - name: Copy runtime DLLs for portable exe
       shell: msys2 {0}
