@@ -31,12 +31,11 @@ jobs:
     - name: Add UCRT64 bin to PATH
       run: echo "C:\msys64\ucrt64\bin" >> $GITHUB_PATH
 
-    - name: Build with Makefile (force ignore format)
+    - name: Build with Makefile (override compiler to available clang)
       shell: msys2 {0}
       run: |
         make clean || true
-        find Sources -name "*.c" -o -name "*.h" | xargs -I {} touch {}   # touch files to update timestamps
-        make -B   # -B = force rebuild everything, ignoring dependencies
+        make CC=clang CXX=clang++ LD=clang LDXX=clang++ AR=ar RANLIB=ranlib
 
     - name: Copy runtime DLLs for portable exe
       shell: msys2 {0}
