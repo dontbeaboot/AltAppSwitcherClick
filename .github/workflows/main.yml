@@ -2,10 +2,10 @@ name: Build AltAppSwitcher on Windows
 
 on:
   push:
-    branches: [ main ]          # Change to 'master' if your default branch is master
+    branches: [ main ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:            # Allows manual trigger
+  workflow_dispatch:
 
 jobs:
   build:
@@ -18,17 +18,17 @@ jobs:
     - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
-        msystem: MINGW64
+        msystem: UCRT64
         update: true
         install: >-
           git
-          mingw-w64-x86_64-gcc          # includes g++ compiler
-          mingw-w64-x86_64-make
-          mingw-w64-x86_64-libgdiplus   # GDI+ support (runtime + headers)
-          base-devel                    # useful build tools (make, etc.)
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-make
+          mingw-w64-ucrt-x86_64-libgdiplus
+          base-devel
 
-    - name: Add MinGW bin to PATH
-      run: echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
+    - name: Add UCRT64 bin to PATH
+      run: echo "C:\msys64\ucrt64\bin" >> $GITHUB_PATH
 
     - name: Build with Makefile
       shell: msys2 {0}
@@ -36,13 +36,13 @@ jobs:
         make clean || true
         make
 
-    - name: Copy runtime DLLs (for portable exe)
+    - name: Copy runtime DLLs for portable exe
       shell: msys2 {0}
       run: |
-        cp /mingw64/bin/libgcc_s_seh-1.dll .
-        cp /mingw64/bin/libstdc++-6.dll .
-        cp /mingw64/bin/libwinpthread-1.dll .
-        cp /mingw64/bin/libgdiplus-0.dll .   # GDI+ DLL if dynamically linked
+        cp /ucrt64/bin/libgcc_s_seh-1.dll .
+        cp /ucrt64/bin/libstdc++-6.dll .
+        cp /ucrt64/bin/libwinpthread-1.dll .
+        cp /ucrt64/bin/libgdiplus-0.dll .
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
