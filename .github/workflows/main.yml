@@ -2,32 +2,32 @@ name: Build AltAppSwitcher on Windows
 
 on:
   push:
-    branches: [ main ]          # or master, depending on your default branch
+    branches: [ main ]          # Change to 'master' if your default branch is master
   pull_request:
     branches: [ main ]
-  workflow_dispatch:            # lets you trigger manually from Actions tab
+  workflow_dispatch:            # Allows manual trigger
 
 jobs:
   build:
-    runs-on: windows-latest     # or windows-2019 if latest fails with DLL issues
+    runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-    - name: Setup MinGW
+    - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
         msystem: MINGW64
         update: true
         install: >-
           git
-          mingw-w64-x86_64-gcc
-          mingw-w64-x86_64-g++
+          mingw-w64-x86_64-gcc          # includes g++ compiler
           mingw-w64-x86_64-make
-          mingw-w64-x86_64-gdiplus
-          mingw-w64-x86_64-pkgconf
+          mingw-w64-x86_64-libgdiplus   # GDI+ support (runtime + headers)
+          base-devel                    # useful build tools (make, etc.)
 
-    - name: Add MinGW to PATH
+    - name: Add MinGW bin to PATH
       run: echo "C:\msys64\mingw64\bin" >> $GITHUB_PATH
 
     - name: Build with Makefile
@@ -36,13 +36,13 @@ jobs:
         make clean || true
         make
 
-    - name: Copy required DLLs (to avoid missing libgcc etc. on run)
+    - name: Copy runtime DLLs (for portable exe)
       shell: msys2 {0}
       run: |
         cp /mingw64/bin/libgcc_s_seh-1.dll .
         cp /mingw64/bin/libstdc++-6.dll .
         cp /mingw64/bin/libwinpthread-1.dll .
-        cp /mingw64/bin/libgdiplus-0.dll .   # if GDI+ is dynamically loaded
+        cp /mingw64/bin/libgdiplus-0.dll .   # GDI+ DLL if dynamically linked
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
