@@ -31,11 +31,13 @@ jobs:
     - name: Add UCRT64 bin to PATH
       run: echo "C:\msys64\ucrt64\bin" >> $GITHUB_PATH
 
-    - name: Build with Makefile (override compiler to available clang)
+    - name: Build with Makefile (disable sanitizers + override compiler)
       shell: msys2 {0}
       run: |
         make clean || true
-        make CC=clang CXX=clang++ LD=clang LDXX=clang++ AR=ar RANLIB=ranlib
+        make CC=clang CXX=clang++ LD=clang LDXX=clang++ AR=ar RANLIB=ranlib \
+             CFLAGS="-O2 -g -Wall -Wextra -Wshadow -Werror -D ARCH_x86_64=1 -D NTDDI_VERSION=NTDDI_WIN10 -std=c11" \
+             LDFLAGS="-static -static-libgcc -l dwmapi -l User32 -l Gdi32 -l Gdiplus -l shlwapi -l pthread -l Ole32 -l Comctl32 -l uuid"
 
     - name: Copy runtime DLLs for portable exe
       shell: msys2 {0}
